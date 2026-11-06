@@ -20,6 +20,14 @@ import {
 // 사용자에게 그대로 보여 줘도 되는 오류
 export class UserFacingError extends Error {}
 
+// 사용자에게 보여 줄 실제 원인 메시지
+export const DAILY_QUOTA_MESSAGE =
+  "오늘 AI 분석 한도를 모두 사용했어요. 한도는 하루에 한 번 초기화되니 잠시 뒤나 내일 다시 시도해 주세요.";
+const BUSY_MESSAGE = "AI 분석 서버가 지금 바쁘거나 응답하지 않아요. 잠시 후 다시 시도해 주세요.";
+const DEADLINE_MESSAGE = "분석 시간이 너무 오래 걸려 중단했어요. 잠시 후 다시 시도해 주세요.";
+const UPLOAD_TIMEOUT_MESSAGE = "영상을 AI 서버로 보내는 데 시간이 너무 오래 걸려요. 잠시 후 다시 시도해 주세요.";
+const FILE_PROCESS_MESSAGE = "영상 처리가 너무 오래 걸려요. 더 짧은 영상으로 다시 시도해 주세요.";
+
 // 앞에서부터 시도하고, 모델이 바쁘거나(503/429) 없으면 다음 모델로 넘어가요.
 // 데모 중 특정 모델이 몰려도 멈추지 않도록 여러 모델을 준비해 둬요. (뒤쪽일수록 가벼운 모델)
 // 사용할 모델은 환경변수 GEMINI_MODEL로 정해요. (맨 앞에 시도하고, 나머지는 장애 대비용 예비 모델이에요.)
@@ -36,7 +44,21 @@ const MODELS = [
     ].filter((m): m is string => Boolean(m)),
   ),
 ];
-const ROUNDS = 2; // 모든 모델이 실패하면 잠시 쉬고 처음부터 한 번 더 시도해요.
+const ROUNDS = 2; // 일시적인 오류로 모든 모델이 실패하면 잠시 쉬고 처음부터 한 번 더 시도해요.
+
+// ───────── 호출별 시간 제한 ─────────
+// Gemini가 에러도 응답도 없이 매달리는 경우가 있어요. (실제로 확인됨) 호출마다 제한 시간을 두고,
+// 넘으면 그 호출을 끊고 다음 모델로 넘어가요. 전체 작업이 무한정 기다리지 않게 하는 핵심 장치예요.
+const GENERATE_TIMEOUT_MS = 75_000; // 모델 한 번 호출 (보통 10~30초)
+const RETRY_PASS_TIMEOUT_MS = 60_000; // 단일 구간 재분석 호출
+const UPLOAD_TIMEOUT_MS = 120_000; // 영상 업로드
+const FILE_GET_TIMEOUT_MS = 15_000; // 파일 상태 조회
+const FILE_PROCESS_MAX_MS = 150_000; // 업로드한 영상이 처리(ACTIVE)될 때까지 기다리는 최대 시간
+const MIN_CALL_MS = 8_000; // 남은 시간이 이보다 적으면 새 호출을 시작하지 않아요
+const FILE_DELETE_TIMEOUT_MS = 10_000;
+
+// 일일 한도 소진 표시는 짧게만 기억해요. (결제를 켜거나 한도가 초기화되면 곧바로 다시 시도해 볼 수 있게)
+const DAILY_EXHAUSTED_MEMORY_MS = 10 * 60_000;
 
 function getClient() {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -46,33 +68,125 @@ function getClient() {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// 일시적인 오류(모델 바쁨/없음/한도/네트워크)면 다음 모델로 넘어가요.
 function isRetryable(e: unknown) {
-  return e instanceof ApiError && [404, 429, 500, 503].includes(e.status);
+  if (e instanceof ApiError) return [404, 429, 500, 503, 504].includes(e.status);
+  return e instanceof TypeError && /fetch failed/i.test(e.message);
 }
 
-// deadline(ms 타임스탬프)이 지나면 더 시도하지 않고 멈춰요. (함수 최대 실행 시간 안에서 깔끔하게 실패하기 위해서예요)
+class GeminiTimeoutError extends Error {}
+
+// 429 중 "하루 요청 한도(PerDay)" 초과인지 확인해요. 같은 모델을 다시 불러도 소용없는 경우예요.
+// (분당 한도 같은 다른 429는 잠시 뒤 다시 시도하면 되니 여기에 해당하지 않아요.)
+function dailyQuotaInfo(e: unknown): { retryAfterMs: number } | null {
+  if (!(e instanceof ApiError) || e.status !== 429) return null;
+  const msg = e.message ?? "";
+  if (!/PerDay|per day/i.test(msg)) return null;
+  const m = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(msg);
+  const ms = m ? Math.ceil(Number(m[1]) * 1000) : DAILY_EXHAUSTED_MEMORY_MS;
+  return { retryAfterMs: Math.min(Math.max(ms, 60_000), DAILY_EXHAUSTED_MEMORY_MS) };
+}
+
+// 이 서버 인스턴스가 최근에 확인한 "일일 한도 소진" 모델 (모델 이름 → 이 시각까지는 건너뛰어요)
+const dailyExhaustedUntil = new Map<string, number>();
+const isDailyExhausted = (model: string) => (dailyExhaustedUntil.get(model) ?? 0) > Date.now();
+const markDailyExhausted = (model: string, ms: number) => dailyExhaustedUntil.set(model, Date.now() + ms);
+const anyDailyExhausted = () => MODELS.some(isDailyExhausted);
+
+// 모든 모델의 일일 한도가 소진된 걸 이미 알고 있다면, 영상을 올리기 전에 바로 실패시켜요. (시간/트래픽 절약)
+export function assertGeminiAvailable() {
+  if (MODELS.every(isDailyExhausted)) throw new UserFacingError(DAILY_QUOTA_MESSAGE);
+}
+
+// ms 뒤에 끊기는 신호. 바깥(전체 작업) 신호가 끊겨도 함께 끊겨요.
+function callSignal(ms: number, outer?: AbortSignal) {
+  const timer = AbortSignal.timeout(ms);
+  const signal = outer ? AbortSignal.any([timer, outer]) : timer;
+  return { signal, timedOut: () => timer.aborted && !outer?.aborted };
+}
+
+// SDK가 abortSignal을 놓쳐도 우리 쪽 대기는 확실히 끝나도록, 신호가 끊기면 바로 거절해요.
+function raceAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new Error("aborted"));
+    if (signal.aborted) return onAbort();
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(
+      (v) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(e);
+      },
+    );
+  });
+}
+
+type FallbackOptions = {
+  deadline?: number; // 이 시각(ms)이 지나면 새 호출을 시작하지 않아요
+  signal?: AbortSignal; // 전체 작업이 중단되면 진행 중인 호출도 끊어요
+  models?: string[]; // 기본은 MODELS 전체
+  timeoutMs: number; // 호출 한 번의 제한 시간
+};
+
+// 모델을 차례로 시도해요.
+// - 호출마다 제한 시간이 있어서, 응답 없이 매달리는 모델은 끊고 다음 모델로 넘어가요.
+// - 일일 한도(PerDay) 초과는 같은 모델을 다시 부르지 않고 바로 다음 모델로 넘어가요.
+// - 모두 실패하면 실제 원인(일일 한도 소진 / 서버 바쁨)을 알 수 있는 메시지로 끝내요.
 async function withModelFallback<T>(
-  run: (model: string) => Promise<T>,
-  deadline?: number,
-): Promise<T> {
+  run: (model: string, signal: AbortSignal) => Promise<T>,
+  opts: FallbackOptions,
+): Promise<{ value: T; model: string; failedAttempts: number }> {
+  const models = opts.models ?? MODELS;
   let lastError: unknown;
+  let failedAttempts = 0;
+
   for (let round = 0; round < ROUNDS; round++) {
-    for (const model of MODELS) {
-      if (deadline && Date.now() > deadline) {
-        throw new UserFacingError(
-          "분석 시간이 너무 오래 걸려 중단했어요. 잠시 후 다시 시도해 주세요.",
-        );
-      }
+    let transientFailure = false; // 이번 회차에 "다시 해 볼 만한" 실패가 있었는지
+    for (const model of models) {
+      if (opts.signal?.aborted) throw new UserFacingError(DEADLINE_MESSAGE);
+      if (isDailyExhausted(model)) continue; // 일일 한도가 이미 소진된 모델은 건너뛰어요
+      const remaining = opts.deadline ? opts.deadline - Date.now() : Infinity;
+      if (remaining < MIN_CALL_MS) throw new UserFacingError(DEADLINE_MESSAGE);
+
+      const call = callSignal(Math.min(opts.timeoutMs, remaining), opts.signal);
       try {
-        return await run(model);
+        const value = await raceAbort(run(model, call.signal), call.signal);
+        return { value, model, failedAttempts };
       } catch (e) {
+        failedAttempts++;
         lastError = e;
+        if (opts.signal?.aborted) throw new UserFacingError(DEADLINE_MESSAGE);
+
+        const daily = dailyQuotaInfo(e);
+        if (daily) {
+          markDailyExhausted(model, daily.retryAfterMs);
+          console.warn(`[gemini] ${model} 일일 한도 소진 → 다음 모델로 넘어가요`);
+          continue;
+        }
+        if (call.timedOut()) {
+          lastError = new GeminiTimeoutError(`${model} 응답 없음(${Math.round(opts.timeoutMs / 1000)}초 제한)`);
+          console.warn(`[gemini] ${model} 응답 시간 초과 → 다음 모델로 넘어가요`);
+          transientFailure = true;
+          continue;
+        }
         if (!isRetryable(e)) throw e;
+        transientFailure = true;
         console.warn(`[gemini] ${model} 실패(${round + 1}회차):`, (e as Error).message.slice(0, 100));
       }
     }
-    if (round < ROUNDS - 1 && !(deadline && Date.now() + 4000 > deadline)) await sleep(4000);
+    // 이번 회차의 실패가 전부 일일 한도 때문이었다면 다시 해도 소용없어요.
+    if (!transientFailure) break;
+    if (round < ROUNDS - 1) {
+      if (opts.deadline && Date.now() + 4000 + MIN_CALL_MS > opts.deadline) break;
+      await sleep(4000);
+    }
   }
+
+  if (models.every(isDailyExhausted)) throw new UserFacingError(DAILY_QUOTA_MESSAGE);
+  if (lastError instanceof GeminiTimeoutError || isRetryable(lastError)) throw new UserFacingError(BUSY_MESSAGE);
   throw lastError;
 }
 
@@ -201,20 +315,49 @@ export function sanitizeSegments(
 export async function analyzeDogVideo(
   video: Blob,
   mimeType: string,
-  deadline?: number, // 이 시각(ms)이 지나면 모델 재시도/재분석을 하지 않아요
+  deadline?: number, // 이 시각(ms)이 지나면 새 호출을 시작하지 않고, 호출마다 남은 시간 안으로 제한해요
+  signal?: AbortSignal, // 전체 작업이 중단되면(하드 시간 초과) 진행 중인 호출도 끊어요
 ): Promise<VideoAnalysis> {
   const ai = getClient();
+  // 모든 모델의 일일 한도가 소진된 걸 이미 알고 있으면, 영상을 올리기 전에 바로 알려요.
+  assertGeminiAvailable();
+  const remaining = () => (deadline ? deadline - Date.now() : Infinity);
 
-  // 1) Gemini에 영상 올리기 → 처리(ACTIVE)될 때까지 기다리기
-  let file = await ai.files.upload({ file: video, config: { mimeType } });
+  // 1) Gemini에 영상 올리기 (제한 시간 있음) → 처리(ACTIVE)될 때까지 기다리기
+  const uploadMs = Math.min(UPLOAD_TIMEOUT_MS, remaining() - MIN_CALL_MS);
+  if (uploadMs < MIN_CALL_MS) throw new UserFacingError(DEADLINE_MESSAGE);
+  const up = callSignal(uploadMs, signal);
+  let file: Awaited<ReturnType<typeof ai.files.upload>>;
   try {
-    const processingDeadline = Date.now() + 150_000;
+    file = await raceAbort(
+      ai.files.upload({ file: video, config: { mimeType, abortSignal: up.signal } }),
+      up.signal,
+    );
+  } catch (e) {
+    if (signal?.aborted) throw new UserFacingError(DEADLINE_MESSAGE);
+    if (up.timedOut()) throw new UserFacingError(UPLOAD_TIMEOUT_MESSAGE);
+    throw e;
+  }
+  try {
+    const processingDeadline = Math.min(
+      Date.now() + FILE_PROCESS_MAX_MS,
+      deadline ? deadline - MIN_CALL_MS * 2 : Infinity,
+    );
     while (file.state === FileState.PROCESSING) {
-      if (Date.now() > processingDeadline) {
-        throw new UserFacingError("영상 처리가 너무 오래 걸려요. 더 짧은 영상으로 다시 시도해 주세요.");
-      }
+      if (signal?.aborted) throw new UserFacingError(DEADLINE_MESSAGE);
+      if (Date.now() > processingDeadline) throw new UserFacingError(FILE_PROCESS_MESSAGE);
       await sleep(2000);
-      file = await ai.files.get({ name: file.name! });
+      const get = callSignal(FILE_GET_TIMEOUT_MS, signal);
+      try {
+        file = await raceAbort(
+          ai.files.get({ name: file.name!, config: { abortSignal: get.signal } }),
+          get.signal,
+        );
+      } catch (e) {
+        if (signal?.aborted) throw new UserFacingError(DEADLINE_MESSAGE);
+        if (get.timedOut()) continue; // 상태 조회 한 번이 느린 것뿐이면 다시 조회해요 (전체 제한은 위에서 지켜요)
+        throw e;
+      }
     }
     if (file.state === FileState.FAILED || !file.uri) {
       throw new UserFacingError("영상을 처리하지 못했어요. 다른 영상(MP4 권장)으로 다시 시도해 주세요.");
@@ -222,66 +365,94 @@ export async function analyzeDogVideo(
     const fileUri = file.uri;
 
     // 2) 행동 구간을 JSON으로 받기 (구조화 출력)
-    const runPass = async (prompt: string, temperature: number): Promise<VideoAnalysis> => {
-      const text = await withModelFallback(async (model) => {
-        const res = await ai.models.generateContent({
-          model,
-          contents: createUserContent([
-            createPartFromUri(fileUri, file.mimeType ?? mimeType),
-            prompt,
-          ]),
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: analysisSchema,
-            temperature,
-          },
-        });
-        if (!res.text) throw new Error("Gemini가 빈 응답을 보냈어요.");
-        return res.text;
-      }, deadline);
+    type Pass = { analysis: VideoAnalysis; model: string; failedAttempts: number };
+    const runPass = async (
+      prompt: string,
+      temperature: number,
+      opts: { models?: string[]; timeoutMs: number },
+    ): Promise<Pass> => {
+      const r = await withModelFallback(
+        async (model, callAbort) => {
+          const res = await ai.models.generateContent({
+            model,
+            contents: createUserContent([
+              createPartFromUri(fileUri, file.mimeType ?? mimeType),
+              prompt,
+            ]),
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: analysisSchema,
+              temperature,
+              abortSignal: callAbort,
+            },
+          });
+          if (!res.text) throw new Error("Gemini가 빈 응답을 보냈어요.");
+          return res.text;
+        },
+        { deadline, signal, models: opts.models, timeoutMs: opts.timeoutMs },
+      );
 
       let parsed: Record<string, unknown>;
       try {
-        parsed = JSON.parse(text);
+        parsed = JSON.parse(r.value);
       } catch {
-        throw new Error("Gemini 응답을 JSON으로 읽지 못했어요: " + text.slice(0, 200));
+        throw new Error("Gemini 응답을 JSON으로 읽지 못했어요: " + r.value.slice(0, 200));
       }
 
       const durationSec = Number(parsed.video_duration_sec);
       const duration = Number.isFinite(durationSec) ? durationSec : 0;
       const segments = sanitizeSegments(parsed.segments, duration);
       return {
-        dogFound: parsed.dog_found !== false && segments.length > 0,
-        durationSec: duration,
-        segments,
+        analysis: {
+          dogFound: parsed.dog_found !== false && segments.length > 0,
+          durationSec: duration,
+          segments,
+        },
+        model: r.model,
+        failedAttempts: r.failedAttempts,
       };
     };
 
-    const first = await runPass(ANALYSIS_PROMPT, 0.2);
+    const first = await runPass(ANALYSIS_PROMPT, 0.2, { timeoutMs: GENERATE_TIMEOUT_MS });
+    const firstResult = first.analysis;
 
     // 3) 10초 이상 영상인데 구간이 1개뿐이면, 딱 1번만 재분석해요. (반복/재귀 없음)
     //    재분석 결과가 더 세분화됐을 때만 쓰고, 아니거나 실패하면 첫 결과를 그대로 써요.
+    //    한도가 빠듯한 상황에서는 불필요한 추가 호출을 만들지 않도록 건너뛰어요:
+    //    - 첫 분석에서 모델이 실패해 다른 모델로 넘어왔거나, 일일 한도가 소진된 모델이 있으면 건너뛰어요.
+    //    - 재분석은 첫 분석이 성공한 그 모델 하나만 한 번 호출해요. (다른 모델로 번지지 않아요)
+    const quotaPressure = first.failedAttempts > 0 || anyDailyExhausted();
     const knownDuration =
-      first.durationSec || Math.max(0, ...first.segments.map((s) => s.endSec));
+      firstResult.durationSec || Math.max(0, ...firstResult.segments.map((s) => s.endSec));
     if (
-      first.dogFound &&
-      first.segments.length === 1 &&
+      firstResult.dogFound &&
+      firstResult.segments.length === 1 &&
+      !quotaPressure &&
+      !signal?.aborted &&
       (!deadline || Date.now() < deadline - RETRY_MIN_REMAINING_MS) &&
       knownDuration >= SINGLE_SEGMENT_RETRY_MIN_SEC
     ) {
       try {
-        const second = await runPass(RETRY_PROMPT, 0.4);
-        if (second.dogFound && second.segments.length > first.segments.length) {
-          return second;
+        const second = await runPass(RETRY_PROMPT, 0.4, {
+          models: [first.model],
+          timeoutMs: RETRY_PASS_TIMEOUT_MS,
+        });
+        if (second.analysis.dogFound && second.analysis.segments.length > firstResult.segments.length) {
+          return second.analysis;
         }
       } catch (e) {
         console.warn("[gemini] 단일 구간 재분석 실패, 첫 결과 사용:", (e as Error).message.slice(0, 100));
       }
     }
-    return first;
+    return firstResult;
   } finally {
-    // 분석이 끝나면 Gemini 쪽 임시 영상 파일은 지워요. (실패해도 무시)
-    if (file.name) ai.files.delete({ name: file.name }).catch(() => {});
+    // 분석이 끝나면(성공/실패/시간 초과 모두) Gemini 쪽 임시 영상 파일을 지워요. (실패해도 무시)
+    // 서버리스 함수가 곧 끝날 수 있어서 짧은 제한 시간을 두고 기다려요.
+    if (file.name) {
+      await ai.files
+        .delete({ name: file.name, config: { abortSignal: AbortSignal.timeout(FILE_DELETE_TIMEOUT_MS) } })
+        .catch(() => {});
+    }
   }
 }
 
@@ -305,6 +476,7 @@ export async function writeDailyLog(input: {
   stats: Stat[];
   durationSec: number;
   deadline?: number;
+  signal?: AbortSignal; // 전체 작업이 중단되면 진행 중인 호출도 끊어요
 }): Promise<DailyLog> {
   const ai = getClient();
 
@@ -341,19 +513,23 @@ ${timelineText}
 - 의료적 진단은 하지 마. 질병, 통증, 건강 이상, 스트레스, 불안, 분리불안 같은 것을 판단하거나 암시하지 마.
 - 과장하거나 유치한 표현, 이모지는 쓰지 마.`;
 
-  const text = await withModelFallback(async (model) => {
-    const res = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: logSchema,
-        temperature: 0.7,
-      },
-    });
-    if (!res.text) throw new Error("Gemini가 빈 응답을 보냈어요.");
-    return res.text;
-  }, input.deadline);
+  const { value: text } = await withModelFallback(
+    async (model, callAbort) => {
+      const res = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: logSchema,
+          temperature: 0.7,
+          abortSignal: callAbort,
+        },
+      });
+      if (!res.text) throw new Error("Gemini가 빈 응답을 보냈어요.");
+      return res.text;
+    },
+    { deadline: input.deadline, signal: input.signal, timeoutMs: GENERATE_TIMEOUT_MS },
+  );
 
   const parsed = JSON.parse(text) as Partial<DailyLog>;
   const body = Array.isArray(parsed.body)
