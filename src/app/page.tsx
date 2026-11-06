@@ -1,0 +1,124 @@
+import Link from "next/link";
+import MyRoomHome from "@/components/MyRoomHome";
+import { formatDuration, getStats } from "@/lib/behaviors";
+import { BEHAVIOR_ICONS } from "@/lib/behavior-ui";
+import { DEMO_RESULT } from "@/lib/demo-data";
+
+const STEPS = [
+  {
+    icon: "🎥",
+    title: "영상 올리기",
+    desc: "홈캠이나 휴대폰으로 찍은 강아지 영상을 올려 주세요.",
+  },
+  {
+    icon: "🔍",
+    title: "AI가 행동 분석",
+    desc: "영상 속 강아지가 무엇을 했는지 AI가 시간순으로 살펴봐요.",
+  },
+  {
+    icon: "📖",
+    title: "영상 속 멍로그",
+    desc: "영상 속 이야기와 행동 비율, 영상에서 확인된 특징을 한눈에 확인해요.",
+  },
+];
+
+export default function Home() {
+  // 예시 영역은 기존 데모 데이터(실제 분석 결과가 아님)를 그대로 보여줘요.
+  const stats = getStats(DEMO_RESULT.seconds, null)
+    .filter((s) => s.seconds > 0)
+    .sort((a, b) => b.seconds - a.seconds);
+  const top = stats.slice(0, 3);
+
+  return (
+    <div>
+      {/* 내 강아지 · 마이룸 · 도감 (기기에 저장된 기록 기반) */}
+      <MyRoomHome />
+
+      {/* 예시 멍로그 */}
+      <section className="mx-auto max-w-5xl px-5 pb-14">
+        <div className="rounded-[2rem] border border-line bg-surface p-6 shadow-soft sm:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl font-bold">🐶 영상 속 멍로그는 이렇게 보여요</h2>
+            <span className="rounded-full bg-pink-soft px-3 py-1 text-xs font-bold text-foreground/70">
+              예시 화면
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-muted">
+            분석이 끝나면 영상 속 행동의 시간과 비율을 이렇게 정리해 드려요.
+          </p>
+          <ul className="mt-6 grid gap-3 sm:grid-cols-3">
+            {top.map((s) => (
+              <li key={s.key} className="rounded-3xl bg-background p-5">
+                <div className="flex items-center gap-3">
+                  <span
+                    aria-hidden
+                    className="flex h-12 w-12 items-center justify-center rounded-2xl bg-beige text-2xl"
+                  >
+                    {BEHAVIOR_ICONS[s.key]}
+                  </span>
+                  <div>
+                    <p className="font-bold">{s.label}</p>
+                    <p className="text-xs text-muted">
+                      {formatDuration(s.seconds)} · {s.percent}%
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-beige">
+                  <div
+                    className="animate-grow h-full rounded-full"
+                    style={{ width: `${s.percent}%`, backgroundColor: s.color }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-5">
+            <Link
+              href="/result/demo"
+              className="inline-block rounded-full border border-line bg-surface px-6 py-3 text-sm font-medium transition hover:-translate-y-0.5 hover:border-brand"
+            >
+              예시 멍로그 전체 보기
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* 이렇게 작동해요 */}
+      <section className="border-y border-line bg-beige/50">
+        <div className="mx-auto max-w-5xl px-5 py-14">
+          <h2 className="text-xl font-bold">이렇게 작동해요</h2>
+          <ol className="mt-8 grid gap-4 sm:grid-cols-3">
+            {STEPS.map((s, i) => (
+              <li
+                key={s.title}
+                className="rounded-3xl border border-line bg-surface p-6 shadow-soft"
+              >
+                <span
+                  aria-hidden
+                  className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-2xl"
+                >
+                  {s.icon}
+                </span>
+                <h3 className="mt-4 text-lg font-bold">
+                  <span className="mr-1.5 text-brand">{i + 1}.</span>
+                  {s.title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{s.desc}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-5xl px-5 py-14">
+        <div className="rounded-[2rem] bg-sage-soft p-6 sm:p-8">
+          <h2 className="text-lg font-bold">멍로그가 하지 않는 것</h2>
+          <p className="mt-2 text-sm leading-relaxed text-foreground/80">
+            멍로그는 질병을 진단하거나 판단하지 않아요. 영상에서 실제로 확인된 행동만 기록하고,
+            걱정되는 부분은 수의사와 상담하시길 권해요.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}

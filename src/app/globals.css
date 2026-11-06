@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fbf6ec; /* cream / ivory */
+  --foreground: #3a332d; /* warm charcoal */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: #fffdf8;
+  --color-muted: #7d7167;
+  --color-line: #ebe0cf;
+  /* 포인트: 세이지 그린 (흰 글씨 대비 4.5:1 이상) */
+  --color-brand: #52805f;
+  --color-brand-dark: #3f6a4c;
+  --color-brand-soft: #e6efe3;
+  --color-sage: #6f9a78;
+  --color-sage-soft: #e6efe3;
+  /* 따뜻한 베이지 / 아주 연한 핑크 */
+  --color-beige: #f2e7d5;
+  --color-pink-soft: #fbe6e1;
+  --font-sans: var(--font-noto-sans-kr), system-ui, sans-serif;
+  --shadow-soft: 0 8px 28px -12px rgb(92 74 52 / 0.22);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-noto-sans-kr), system-ui, sans-serif;
+}
+
+/* 부드러운 움직임 (움직임 줄이기 설정이면 꺼요) */
+@keyframes mung-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes mung-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes mung-wiggle {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+}
+@keyframes mung-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-float { animation: mung-float 4.5s ease-in-out infinite; }
+  .animate-fade-up { animation: mung-fade-up 0.6s ease-out both; }
+  .animate-wiggle { animation: mung-wiggle 1.6s ease-in-out infinite; transform-origin: 50% 90%; }
+  .animate-grow { animation: mung-grow 0.8s ease-out both; transform-origin: left center; }
+}

@@ -1,0 +1,295 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import {
+  BEHAVIOR_KEYS,
+  BEHAVIOR_LABELS,
+  formatDuration,
+  getStats,
+  type SecondsByBehavior,
+} from "@/lib/behaviors";
+import { BEHAVIOR_ICONS } from "@/lib/behavior-ui";
+import { ageLabel, coatLabel, genderLabel } from "@/lib/dog-look";
+import { clearMyDog, getCollection, getLevel, useMyDog } from "@/lib/my-dog";
+import BehaviorDex from "./BehaviorDex";
+import DogCharacter from "./DogCharacter";
+import HomeTimeline from "./HomeTimeline";
+import MyRoom from "./MyRoom";
+import ProfileEditor from "./ProfileEditor";
+
+const CARD = "rounded-[2rem] border border-line bg-surface p-5 shadow-soft sm:p-6";
+
+function dateLabel(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("ko-KR", { month: "long", day: "numeric" });
+}
+
+export default function MyRoomHome() {
+  const dog = useMyDog();
+  const [editorOpen, setEditorOpen] = useState(false);
+
+  const collection = getCollection(dog.records);
+  const foundKeys = BEHAVIOR_KEYS.filter((k) => k !== "etc" && collection[k].count > 0);
+  const dexTotal = BEHAVIOR_KEYS.filter((k) => k !== "etc").length;
+  const lv = getLevel(dog.records.length);
+  const latest = dog.records[0];
+
+  // 누적 도감: 지금까지 모은 행동별 관찰 시간으로 카드를 채워요.
+  const totals = Object.fromEntries(
+    BEHAVIOR_KEYS.map((k) => [k, collection[k].seconds]),
+  ) as SecondsByBehavior;
+  const dexStats = getStats(totals, null);
+
+  // 프로필 요약: 입력한 항목만 보여줘요.
+  const { profile } = dog;
+  const profileChips = [
+    profile.breed,
+    coatLabel(profile.coat),
+    genderLabel(profile.gender),
+    ageLabel(profile.ageYears),
+  ].filter(Boolean);
+
+  return (
+    <>
+      {/* 내 강아지 + 방 */}
+      <section id="my-dog" className="mx-auto max-w-5xl scroll-mt-24 px-5 pb-10 pt-8 sm:pt-12">
+        <div className="animate-fade-up mb-6 text-center md:text-left">
+          <p className="inline-block rounded-full bg-brand-soft px-3.5 py-1.5 text-sm font-medium text-brand-dark">
+            강아지의 하루를 AI가 이해하고 기록해요
+          </p>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
+          {/* 프로필 */}
+          <aside className={`${CARD} animate-fade-up`}>
+            <div className="flex items-center gap-4 lg:flex-col lg:items-center lg:text-center">
+              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full border-4 border-brand-soft bg-beige lg:h-28 lg:w-28">
+                {profile.photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={profile.photo}
+                    alt={`${dog.name}의 사진`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <DogCharacter
+                    className="h-full w-full translate-y-2 scale-125"
+                    label="내 강아지"
+                    look={{ breed: profile.breed, coat: profile.coat }}
+                  />
+                )}
+              </div>
+              <div className="min-w-0 flex-1 lg:w-full">
+                <h1 className="break-keep text-2xl font-bold">{dog.name}</h1>
+                <p className="mt-1 text-sm text-muted">
+                  <span className="mr-1.5 rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">
+                    Lv.{lv.level}
+                  </span>
+                  {lv.name}
+                </p>
+              </div>
+            </div>
+
+            {profileChips.length > 0 && (
+              <ul className="mt-4 flex flex-wrap gap-1.5 lg:justify-center" aria-label="강아지 정보">
+                {profileChips.map((c) => (
+                  <li key={c} className="rounded-full bg-beige px-3 py-1 text-xs font-medium text-foreground/80">
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              type="button"
+              onClick={() => setEditorOpen(true)}
+              className="mt-4 w-full rounded-full border border-line bg-background px-4 py-2.5 text-sm font-bold transition hover:-translate-y-0.5 hover:border-brand"
+            >
+              ✏️ {profileChips.length > 0 || profile.photo ? "프로필 수정" : "프로필 만들기"}
+            </button>
+
+            {/* 경험치 */}
+            <div className="mt-5">
+              <div
+                role="progressbar"
+                aria-valuenow={Math.round(lv.progress * 100)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="다음 레벨까지"
+                className="h-3 overflow-hidden rounded-full bg-beige"
+              >
+                <div
+                  className="h-full rounded-full bg-brand transition-all duration-700"
+                  style={{ width: `${Math.round(lv.progress * 100)}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-xs text-muted">
+                {lv.isMax
+                  ? "최고 레벨이에요!"
+                  : `다음 레벨까지 멍로그 ${lv.toNext}개`}
+              </p>
+            </div>
+
+            {/* 기록 요약 */}
+            <dl className="mt-5 grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-2xl bg-background p-3">
+                <dt className="text-xs text-muted">멍로그 기록</dt>
+                <dd className="mt-0.5 text-lg font-bold">{dog.records.length}개</dd>
+              </div>
+              <div className="rounded-2xl bg-background p-3">
+                <dt className="text-xs text-muted">행동 도감</dt>
+                <dd className="mt-0.5 text-lg font-bold">
+                  {foundKeys.length}/{dexTotal}
+                </dd>
+              </div>
+            </dl>
+
+            {/* 상태 */}
+            <div className="mt-3 rounded-2xl bg-brand-soft p-3 text-sm leading-relaxed text-brand-dark">
+              {latest ? (
+                <>
+                  <p className="font-bold">최근 기록 · {dateLabel(latest.savedAt)}</p>
+                  <p className="mt-0.5">
+                    {latest.top
+                      ? `가장 많이 관찰된 행동: ${BEHAVIOR_ICONS[latest.top]} ${BEHAVIOR_LABELS[latest.top]}`
+                      : "관찰된 행동이 기록됐어요."}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-bold">영상을 기다리고 있어요</p>
+                  <p className="mt-0.5">첫 영상을 올리면 도감과 방이 채워져요.</p>
+                </>
+              )}
+            </div>
+          </aside>
+
+          {/* 방 */}
+          <div className="animate-fade-up">
+            <MyRoom collection={collection} />
+          </div>
+        </div>
+      </section>
+
+      {/* 방 아래: 실제 분석 결과의 행동 타임라인 */}
+      <HomeTimeline />
+
+      {/* 퀘스트 CTA */}
+      <section className="mx-auto max-w-5xl px-5 pb-10">
+      <div className="mt-6 flex flex-col items-center gap-3 rounded-[2rem] bg-beige/70 p-5 text-center sm:flex-row sm:justify-between sm:text-left">
+        <div>
+          <p className="font-bold">
+            🎥 새 영상을 올리면 AI가 {dog.name}의 행동을 분석해서 도감과 방을 채워요
+          </p>
+          <p className="mt-1 text-sm text-muted">1~3분 정도의 강아지 영상을 올려주세요.</p>
+        </div>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+          <Link
+            href="/upload"
+            className="rounded-full bg-brand px-8 py-4 text-center text-lg font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-dark"
+          >
+            🎥 영상 업로드하기
+          </Link>
+          <Link
+            href="/result/demo"
+            className="text-center text-sm font-medium text-brand-dark underline-offset-4 hover:underline"
+          >
+            예시 멍로그 먼저 보기 →
+          </Link>
+        </div>
+      </div>
+      </section>
+
+      {/* 최근 멍로그 */}
+      <section className="mx-auto max-w-5xl px-5 pb-10">
+        <div className={CARD}>
+          <h2 className="text-lg font-bold">📖 내 멍로그 기록</h2>
+          {dog.records.length === 0 ? (
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              아직 저장된 기록이 없어요. 영상을 분석하면 결과가 이곳에 차곡차곡 쌓여요.
+            </p>
+          ) : (
+            <ul className="mt-4 space-y-2">
+              {dog.records.slice(0, 5).map((r) => (
+                <li key={r.id}>
+                  <Link
+                    href={`/result/${r.id}`}
+                    className="flex items-center gap-3 rounded-2xl bg-background p-3 transition hover:-translate-y-0.5 hover:bg-beige/60"
+                  >
+                    <span
+                      aria-hidden
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-beige text-xl"
+                    >
+                      {r.top ? BEHAVIOR_ICONS[r.top] : "🐾"}
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm">
+                      <span className="block font-bold">영상 속 멍로그 · {dateLabel(r.savedAt)}</span>
+                      <span className="block text-xs text-muted">
+                        {r.top ? `${BEHAVIOR_LABELS[r.top]} 중심` : "관찰된 행동 기록"} ·{" "}
+                        {formatDuration(r.observedSec)} 관찰
+                      </span>
+                    </span>
+                    <span aria-hidden className="text-muted">
+                      ›
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-4 text-xs leading-relaxed text-muted">
+            이 기록과 레벨, 도감은 이 기기의 브라우저에만 저장돼요. (로그인 기능은 아직 없어요)
+            {dog.records.length > 0 && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm("이 기기에 저장된 내 강아지 기록을 모두 지울까요?")) clearMyDog();
+                  }}
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  기록 지우기
+                </button>
+              </>
+            )}
+          </p>
+        </div>
+      </section>
+
+      {/* 행동 도감 */}
+      <section id="dex" className="mx-auto max-w-5xl scroll-mt-24 px-5 pb-10">
+        <h2 className="text-xl font-bold">📖 행동 도감</h2>
+        <p className="mt-2 mb-6 text-sm leading-relaxed text-muted">
+          영상에서 실제로 확인된 행동만 도감에 담겨요. 못 만난 행동은 영상에 아직 담기지 않았다는 뜻이에요.
+        </p>
+        <BehaviorDex stats={dexStats} missingText="아직 못 만났어요" />
+      </section>
+
+      {/* 앞으로의 기능 */}
+      <section className="mx-auto max-w-5xl px-5 pb-14">
+        <div className="flex items-start gap-4 rounded-[2rem] border border-dashed border-line bg-background p-5 sm:p-6">
+          <span
+            aria-hidden
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-beige text-2xl grayscale"
+          >
+            🔒
+          </span>
+          <div>
+            <p className="font-bold">
+              평소 패턴과 비교하기
+              <span className="ml-2 rounded-full bg-pink-soft px-2 py-0.5 text-xs font-bold text-foreground/70">
+                준비 중
+              </span>
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">
+              지금은 영상 하나만 분석해서 평소와 비교하지 않아요. 기록이 충분히 쌓이면 평소 패턴과 비교하는 기능을 만들 예정이에요.
+            </p>
+          </div>
+        </div>
+      </section>
+      {editorOpen && <ProfileEditor onClose={() => setEditorOpen(false)} />}
+    </>
+  );
+}
