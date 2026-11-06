@@ -24,6 +24,7 @@ import MyDogCharacter from "./MyDogCharacter";
 import MyRoom from "./MyRoom";
 import PetPhoto from "./PetPhoto";
 import ProfileEditor from "./ProfileEditor";
+import UsualPattern from "./UsualPattern";
 import { DecorPanel, WardrobePanel } from "./StylePanels";
 
 function dateLabel(iso: string) {
@@ -369,28 +370,8 @@ export default function MyRoomHome() {
         <BehaviorDex stats={dexStats} missingText="아직 못 만났어요" />
       </section>
 
-      {/* 앞으로의 기능 */}
-      <section className="mx-auto max-w-5xl px-4 pb-12 sm:px-5 sm:pb-14">
-        <div className="flex items-start gap-4 rounded-[1.75rem] border border-dashed border-line bg-background p-5 sm:p-6">
-          <span
-            aria-hidden
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-beige text-2xl grayscale"
-          >
-            🔒
-          </span>
-          <div>
-            <p className="font-bold">
-              평소 패턴과 비교하기
-              <span className="ml-2 rounded-full bg-pink-soft px-2 py-0.5 text-xs font-bold text-foreground/70">
-                준비 중
-              </span>
-            </p>
-            <p className="mt-1 text-sm leading-relaxed text-muted">
-              지금은 영상 하나만 분석해서 평소와 비교하지 않아요. 기록이 충분히 쌓이면 평소 패턴과 비교하는 기능을 만들 예정이에요.
-            </p>
-          </div>
-        </div>
-      </section>
+      {/* 평소 패턴과 비교하기 / 평소와 다른 점: 분석 완료 영상이 5개 이상이면 열려요 (가장 최근 영상 기준) */}
+      <UsualPattern currentId={dog.records[0]?.id ?? null} variant="home" />
       {editorOpen && <ProfileEditor onClose={() => setEditorOpen(false)} />}
     </>
   );
