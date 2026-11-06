@@ -1,48 +1,63 @@
 // 멍로그 마스코트. 분석 상태에 맞춰 표정이 바뀌는 인라인 SVG예요. (외부 이미지 없음)
-// look을 주면 내 강아지 프로필(털색/견종)에 맞춰 기본 외형이 조금 달라져요. 없으면 처음 만든 기본 캐릭터예요.
-import { earStyleFor, paletteFor, type DogLook } from "@/lib/dog-look";
+// look을 주면 내 강아지 프로필(견종/털색)에 맞춰 외형이 달라져요. 없으면 처음 만든 기본 캐릭터예요.
+// - 털색: 팔레트(색)가 바뀌어요. 털색을 고르지 않으면 견종에 흔한 털색을 써요.
+// - 견종: 귀/털 질감/꼬리/체형/얼굴 무늬 같은 특징이 달라져요. (lib/dog-look.ts의 TRAITS)
+import { effectiveCoat, paletteFor, traitsFor, type DogLook } from "@/lib/dog-look";
+import type { OutfitSelection } from "@/lib/wardrobe";
+import {
+  BreedBodyBack,
+  BreedBodyMarks,
+  BreedEars,
+  BreedFaceMarks,
+  BreedFrontFur,
+  BreedHeadBack,
+  BreedHeadTop,
+  BreedMuzzleFront,
+  BreedTail,
+  Feet,
+} from "./BreedArt";
+import { OutfitBody, OutfitHead } from "./DogOutfit";
 
 export type DogMood = "idle" | "thinking" | "done";
 
-export function DogArt({ mood = "idle", look }: { mood?: DogMood; look?: DogLook }) {
+export function DogArt({
+  mood = "idle",
+  look,
+  outfit,
+}: {
+  mood?: DogMood;
+  look?: DogLook;
+  outfit?: OutfitSelection; // 옷장에서 고른 옷 (없으면 기본 모습)
+}) {
   const thinking = mood === "thinking";
-  const p = paletteFor(look?.coat);
-  const ears = earStyleFor(look?.breed);
-  const twoTone = look?.coat === "two";
+  const p = paletteFor(look?.coat, look?.breed);
+  const t = traitsFor(look?.breed);
+  const twoTone = effectiveCoat(look?.coat, look?.breed) === "two";
+  const flat = t.face === "flat";
+  const eyeR = 6 * t.eye;
+  const b = t.body;
 
   return (
-    <g>
+    // 작은 견종은 작게, 큰 견종은 크게 (바닥 가운데를 기준으로 키워요)
+    <g transform={`translate(100 198) scale(${t.scale}) translate(-100 -198)`}>
       {/* 꼬리 */}
-      <path d="M142 158 C166 148 172 128 160 116" stroke={p.tail} strokeWidth="12" strokeLinecap="round" fill="none" />
-      {/* 몸 */}
-      <ellipse cx="100" cy="158" rx="46" ry="34" fill={p.body} />
-      <ellipse cx="100" cy="166" rx="26" ry="20" fill={p.belly} />
-      <ellipse cx="72" cy="188" rx="15" ry="9" fill={p.feet} />
-      <ellipse cx="128" cy="188" rx="15" ry="9" fill={p.feet} />
+      <BreedTail t={t} p={p} />
+      {/* 몸 (곱슬/솜뭉치 견종은 둘레에 털뭉치가 먼저 깔려요) */}
+      <BreedBodyBack t={t} p={p} />
+      <ellipse cx="100" cy={b.cy} rx={b.rx} ry={b.ry} fill={p.body} />
+      <ellipse cx="100" cy={b.cy + 8} rx={b.rx * 0.565} ry={b.ry * 0.59} fill={p.belly} />
+      <BreedBodyMarks t={t} />
+      <Feet t={t} p={p} />
+      {/* 몸/목 옷: 머리보다 먼저 그려서 머리가 옷깃 위로 겹쳐요 */}
+      <OutfitBody outfit={outfit} body={b} />
+      {/* 옷 위로 내려오는 털 (긴 털 치마, 발 방울) */}
+      <BreedFrontFur t={t} p={p} />
+      {/* 머리 전체(귀, 얼굴, 머리 위 소품): 작은 얼굴/큰 얼굴은 목 아래를 기준으로 크기만 달라져요 */}
+      <g transform={t.head === 1 ? undefined : `translate(100 150) scale(${t.head}) translate(-100 -150)`}>
       {/* 귀 (견종에 따라 모양이 달라요) */}
-      {ears === "floppy" && (
-        <>
-          <ellipse cx="55" cy="84" rx="19" ry="33" fill={p.ear} transform="rotate(14 55 84)" />
-          <ellipse cx="145" cy="84" rx="19" ry="33" fill={p.ear} transform="rotate(-14 145 84)" />
-        </>
-      )}
-      {ears === "pointy" && (
-        <>
-          <path d="M40 76 L50 22 L84 56 Z" fill={p.ear} strokeLinejoin="round" stroke={p.ear} strokeWidth="8" />
-          <path d="M160 76 L150 22 L116 56 Z" fill={p.ear} strokeLinejoin="round" stroke={p.ear} strokeWidth="8" />
-          <path d="M52 44 L53 60 L66 54 Z" fill="#f6b9b0" opacity="0.7" />
-          <path d="M148 44 L147 60 L134 54 Z" fill="#f6b9b0" opacity="0.7" />
-        </>
-      )}
-      {ears === "puff" && (
-        <>
-          <circle cx="48" cy="86" r="24" fill={p.ear} />
-          <circle cx="152" cy="86" r="24" fill={p.ear} />
-          <circle cx="42" cy="100" r="14" fill={p.ear} />
-          <circle cx="158" cy="100" r="14" fill={p.ear} />
-        </>
-      )}
-      {/* 머리 */}
+      <BreedEars t={t} p={p} />
+      {/* 머리 (곱슬/솜뭉치/풍성한 털 견종은 둘레에 털이 먼저 깔려요) */}
+      <BreedHeadBack t={t} p={p} />
       <circle cx="100" cy="96" r="52" fill={p.head} />
       <ellipse
         cx="74"
@@ -52,17 +67,23 @@ export function DogArt({ mood = "idle", look }: { mood?: DogMood; look?: DogLook
         fill={p.shade}
         opacity={twoTone ? 0.95 : 0.7}
       />
-      {ears === "puff" && (
-        <>
-          <circle cx="100" cy="46" r="20" fill={p.head} />
-          <circle cx="80" cy="50" r="14" fill={p.head} />
-          <circle cx="120" cy="50" r="14" fill={p.head} />
-        </>
-      )}
-      {/* 주둥이 */}
-      <ellipse cx="100" cy="113" rx="25" ry="19" fill={p.snout} />
-      <ellipse cx="100" cy="104" rx="8.5" ry="6" fill={p.nose} />
-      <path d="M100 110 V118 M100 118 C94 126 86 124 85 120 M100 118 C106 126 114 124 115 120" stroke={p.nose} strokeWidth="2.6" strokeLinecap="round" fill="none" />
+      <BreedFaceMarks t={t} />
+      <BreedHeadTop t={t} p={p} />
+      {/* 주둥이 (납작한 얼굴은 짧고 넓게) */}
+      <ellipse cx="100" cy={flat ? 116 : 113} rx={25} ry={flat ? 14 : 19} fill={p.snout} />
+      <BreedMuzzleFront t={t} p={p} />
+      <ellipse cx="100" cy={flat ? 108 : 104} rx={flat ? 10 : 8.5} ry={flat ? 6.5 : 6} fill={p.nose} />
+      <path
+        d={
+          flat
+            ? "M100 113 V119 M100 119 C95 124 88 123 87 120 M100 119 C105 124 112 123 113 120"
+            : "M100 110 V118 M100 118 C94 126 86 124 85 120 M100 118 C106 126 114 124 115 120"
+        }
+        stroke={p.nose}
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        fill="none"
+      />
       {/* 볼터치 */}
       <circle cx="70" cy="108" r="8" fill="#f6b9b0" opacity="0.55" />
       <circle cx="130" cy="108" r="8" fill="#f6b9b0" opacity="0.55" />
@@ -74,12 +95,15 @@ export function DogArt({ mood = "idle", look }: { mood?: DogMood; look?: DogLook
         </g>
       ) : (
         <g fill="#3a2e26">
-          <circle cx={thinking ? 83 : 80} cy={thinking ? 88 : 92} r="6" />
-          <circle cx={thinking ? 123 : 120} cy={thinking ? 88 : 92} r="6" />
+          <circle cx={thinking ? 83 : 80} cy={thinking ? 88 : 92} r={eyeR} />
+          <circle cx={thinking ? 123 : 120} cy={thinking ? 88 : 92} r={eyeR} />
           <circle cx={thinking ? 85 : 82} cy={thinking ? 86 : 90} r="2" fill="#fff" />
           <circle cx={thinking ? 125 : 122} cy={thinking ? 86 : 90} r="2" fill="#fff" />
         </g>
       )}
+      {/* 머리 위 소품 (리본/모자) */}
+      <OutfitHead outfit={outfit} />
+      </g>
       {/* 상태 장식 */}
       {thinking && (
         <g fill="#c9b9a2">
@@ -109,15 +133,17 @@ export default function DogCharacter({
   className = "",
   label = "멍로그 강아지 캐릭터",
   look,
+  outfit,
 }: {
   mood?: DogMood;
   className?: string;
   label?: string;
   look?: DogLook;
+  outfit?: OutfitSelection;
 }) {
   return (
     <svg viewBox="0 0 200 200" role="img" aria-label={label} className={className}>
-      <DogArt mood={mood} look={look} />
+      <DogArt mood={mood} look={look} outfit={outfit} />
     </svg>
   );
 }

@@ -30,10 +30,10 @@ export default function BehaviorDex({
         return (
           <li
             key={key}
-            className={`flex flex-col items-center rounded-3xl border p-4 text-center shadow-soft transition hover:-translate-y-0.5 ${
+            className={`flex flex-col items-center rounded-3xl p-4 text-center transition hover:-translate-y-0.5 ${
               found === false
-                ? "border-dashed border-line bg-background text-muted"
-                : "border-line bg-surface"
+                ? "border border-dashed border-line bg-background text-muted"
+                : "bg-surface shadow-soft ring-1 ring-black/5"
             }`}
           >
             <span

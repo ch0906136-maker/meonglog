@@ -3,16 +3,12 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import DogCharacter from "@/components/DogCharacter";
 import ResultView from "@/components/ResultView";
-import { DEMO_RESULT } from "@/lib/demo-data";
 import { loadResult } from "@/lib/results";
 
 export const metadata = { title: "영상 속 멍로그 - 멍로그" };
 
 async function Content({ params }: PageProps<"/result/[id]">) {
   const { id } = await params;
-
-  // 메인의 "예시 멍로그 보기"
-  if (id === "demo") return <ResultView data={DEMO_RESULT} />;
 
   const result = await loadResult(id);
   if (result.state === "not_found") notFound();
@@ -25,7 +21,7 @@ async function Content({ params }: PageProps<"/result/[id]">) {
         <p className="mt-3 text-muted">{result.error}</p>
         <Link
           href="/upload"
-          className="mt-8 inline-block rounded-full bg-brand px-8 py-4 font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-dark"
+          className="btn-primary mt-8 !py-4 text-base"
         >
           다시 시도하기
         </Link>

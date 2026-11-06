@@ -7,6 +7,7 @@ import {
   formatDuration,
   isBehaviorKey,
   isConfident,
+  normalizeSegments,
   secondsFromSegments,
   type ResultData,
   type Segment,
@@ -59,15 +60,18 @@ export async function loadResult(analysisId: string): Promise<LoadedResult> {
   ]);
   if (!log) return { state: "failed", error: "멍로그를 찾을 수 없어요." };
 
-  const segments: Segment[] = (rows ?? [])
+  // 시간은 항상 end_sec - start_sec으로 계산하고, 겹침/범위 밖 값은 정리해요. (정상 데이터는 그대로예요)
+  const segments: Segment[] = normalizeSegments(
+    (rows ?? [])
     .filter((r) => isBehaviorKey(r.behavior))
     .map((r) => ({
       behavior: r.behavior,
-      startSec: r.start_sec,
-      endSec: r.end_sec,
+      startSec: Number(r.start_sec),
+      endSec: Number(r.end_sec),
       note: r.note,
       confidence: r.confidence,
-    }));
+    })),
+  );
   const confident = segments.filter(isConfident);
   const uncertainSec = segments
     .filter((s) => !isConfident(s))
@@ -80,7 +84,6 @@ export async function loadResult(analysisId: string): Promise<LoadedResult> {
   return {
     state: "completed",
     data: {
-      isDemo: false,
       dogName: "우리 강아지",
       dateLabel: new Date(analysis.created_at).toLocaleDateString("ko-KR", {
         timeZone: "Asia/Seoul",

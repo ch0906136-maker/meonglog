@@ -114,7 +114,7 @@ export default function UploadForm() {
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-[2rem] border-2 border-dashed px-6 py-14 text-center shadow-soft transition focus-within:border-brand ${
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-[1.75rem] border-2 border-dashed px-5 py-12 text-center shadow-soft sm:px-6 sm:py-14 transition focus-within:border-brand ${
           dragging
             ? "border-brand bg-brand-soft"
             : "border-line bg-surface hover:-translate-y-0.5 hover:border-brand"
@@ -133,8 +133,8 @@ export default function UploadForm() {
           </>
         ) : (
           <>
-            <span className="mt-4 text-lg font-bold">
-              영상을 끌어다 놓거나 클릭해서 선택하세요
+            <span className="mt-4 break-keep text-lg font-bold">
+              영상을 끌어다 놓거나 눌러서 선택하세요
             </span>
             <span className="mt-1 text-sm text-muted">
               MP4, MOV, WebM · 최대 {MAX_MB}MB
@@ -153,7 +153,7 @@ export default function UploadForm() {
 
       {/* 영상 정보 */}
       {file && (
-        <dl className="mt-4 grid grid-cols-3 gap-2 rounded-3xl border border-line bg-surface p-4 text-center text-sm shadow-soft">
+        <dl className="card mt-4 grid grid-cols-3 gap-2 !p-4 text-center text-sm">
           <div>
             <dt className="text-xs text-muted">형식</dt>
             <dd className="mt-0.5 font-bold">
@@ -179,7 +179,7 @@ export default function UploadForm() {
         </p>
       )}
 
-      <div className="mt-5 rounded-3xl bg-brand-soft p-5 text-sm leading-relaxed text-brand-dark">
+      <div className="mt-5 rounded-2xl bg-brand-soft p-4 text-sm leading-relaxed text-brand-dark sm:p-5">
         <p className="font-bold">🐾 권장 영상 길이: 1~3분</p>
         <p className="mt-1">
           지금은 짧은 영상으로 먼저 체험해 볼 수 있어요. 강아지가 화면에 잘 보이면 더 정확하게 분석해요.
@@ -191,7 +191,7 @@ export default function UploadForm() {
         onClick={onStart}
         disabled={!file || uploading}
         aria-live="polite"
-        className="mt-6 w-full rounded-full bg-brand px-7 py-4 text-lg font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-dark disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-line disabled:text-muted disabled:shadow-none"
+        className="mt-6 min-h-14 w-full rounded-full bg-brand px-7 py-4 text-lg font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-dark active:scale-[0.98] disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-line disabled:text-muted disabled:shadow-none"
       >
         {uploading ? statusText : "🐾 분석 시작하기"}
       </button>

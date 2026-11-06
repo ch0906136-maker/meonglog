@@ -1,22 +1,23 @@
 import Link from "next/link";
 import {
-  BEHAVIOR_COLORS,
-  BEHAVIOR_LABELS,
-  formatClock,
   formatDuration,
   getChanges,
   getHighlights,
   getStats,
+  normalizeSegments,
+  secondsFromSegments,
+  summarizeBehaviors,
   type ResultData,
+  type Segment,
 } from "@/lib/behaviors";
 import { BEHAVIOR_ICONS } from "@/lib/behavior-ui";
-import BehaviorDex from "./BehaviorDex";
+import BehaviorSummary from "./BehaviorSummary";
 import BehaviorTimeline, { type TimelineItem } from "./BehaviorTimeline";
 import MyDogCharacter from "./MyDogCharacter";
 import DogName from "./DogName";
 import RecordReward from "./RecordReward";
 
-const CARD = "rounded-[2rem] border border-line bg-surface p-6 shadow-soft sm:p-8";
+const CARD = "card sm:!p-8";
 
 export default function ResultView({
   data,
@@ -25,50 +26,49 @@ export default function ResultView({
   data: ResultData;
   analysisId?: string; // 실제 분석 결과일 때만 있어요 (내 강아지 도감에 담는 데 써요)
 }) {
-  const stats = getStats(data.seconds, data.usualRatio);
-  const changes = getChanges(stats);
-  const highlights = getHighlights(stats, data.segments);
-  // 실제 과거 기록으로 만든 baseline(usualRatio)이 있을 때만 평소와 정량 비교해요. (지금은 항상 없음)
-  const hasBaseline = data.usualRatio !== null;
-
-  // 실제 분석 결과에는 구간의 시작/종료 시간이 있어요.
-  const timelineItems: TimelineItem[] = data.timeline.flatMap((t) =>
-    t.startSec !== undefined && t.endSec !== undefined
-      ? [
-          {
-            behavior: t.behavior,
-            startSec: t.startSec,
-            endSec: t.endSec,
-            note: t.note,
-            confident: t.confident,
-          },
-        ]
-      : [],
+  // 실제 분석 결과에는 구간의 시작/종료 시간(start_sec/end_sec)이 있어요.
+  // 화면에서 한 번 더 정리해요: 겹침/범위 밖 값을 걸러내서, 행동 시간 합계가 영상 길이(마지막 종료 시각)를 넘을 수 없어요.
+  // 시간은 항상 end_sec - start_sec이고, 정상 데이터는 그대로예요.
+  const timelineItems: TimelineItem[] = normalizeSegments(
+    data.timeline.flatMap((t) =>
+      t.startSec !== undefined && t.endSec !== undefined
+        ? [
+            {
+              behavior: t.behavior,
+              startSec: t.startSec,
+              endSec: t.endSec,
+              note: t.note,
+              confident: t.confident,
+            },
+          ]
+        : [],
+    ),
   );
   const hasTimes = timelineItems.length > 0;
+  // 확신 있는 구간만 시간/비율 통계에 써요. (타임라인에는 불확실 구간도 빗금으로 보여줘요)
+  const confidentSegments: Segment[] = timelineItems
+    .filter((t) => t.confident)
+    .map((t) => ({ behavior: t.behavior, startSec: t.startSec, endSec: t.endSec, note: t.note, confidence: null }));
+  const seconds = secondsFromSegments(confidentSegments);
+  const stats = getStats(seconds, data.usualRatio);
+  const changes = getChanges(stats);
+  const highlights = getHighlights(stats, confidentSegments);
+  // 실제 과거 기록으로 만든 baseline(usualRatio)이 있을 때만 평소와 정량 비교해요. (지금은 항상 없음)
+  const hasBaseline = data.usualRatio !== null;
+  // 행동 기록: 원본 구간은 그대로 두고, 같은 행동만 모아서 집계해요.
+  const summary = summarizeBehaviors(timelineItems);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-5 py-10">
+    <div className="mx-auto max-w-4xl space-y-5 px-4 py-8 sm:px-5 sm:py-10">
       {/* 완성 헤더 */}
-      <section className="animate-fade-up relative overflow-hidden rounded-[2rem] bg-brand-soft p-6 sm:p-10">
+      <section className="animate-fade-up relative overflow-hidden rounded-[1.75rem] bg-brand-soft p-6 sm:p-10">
         <div className="flex flex-col-reverse items-center gap-6 sm:flex-row sm:justify-between">
           <div className="text-center sm:text-left">
-            {data.isDemo && (
-              <p className="mb-3 inline-block rounded-full bg-pink-soft px-3 py-1 text-xs font-bold text-foreground/70">
-                예시 화면이에요 · 실제 분석 결과가 아니에요
-              </p>
-            )}
             <h1 className="break-keep text-2xl font-bold leading-snug sm:text-3xl">
-              {data.isDemo ? "오늘의 멍로그 예시" : "✨ 영상 속 멍로그가 완성됐어요!"}
+              ✨ 영상 속 멍로그가 완성됐어요!
             </h1>
             <p className="mt-2 text-foreground/80">
-              {data.isDemo ? (
-                `${data.dogName}의 하루를 이런 모습으로 기록해요.`
-              ) : (
-                <>
-                  AI가 <DogName />의 행동을 분석했어요.
-                </>
-              )}
+              AI가 <DogName />의 행동을 분석했어요.
             </p>
             <p className="mt-3 text-xs text-muted">
               {data.dateLabel} · {data.sourceLabel}
@@ -82,19 +82,9 @@ export default function ResultView({
         </div>
       </section>
 
-      {/* 이번 영상으로 얻은 기록: 도감/레벨 연결 (실제 분석 결과일 때만) */}
-      {!data.isDemo && analysisId && (
-        <RecordReward
-          analysisId={analysisId}
-          seconds={data.seconds}
-          observedSec={highlights.observedSec}
-          segments={timelineItems}
-        />
-      )}
-
       {/* AI 멍로그 */}
       <section className={`${CARD} animate-fade-up`}>
-        <h2 className="text-lg font-bold">🐶 {data.isDemo ? `${data.dogName}의 하루` : "영상 속 멍로그"}</h2>
+        <h2 className="text-lg font-bold">🐶 영상 속 멍로그</h2>
         <blockquote className="mt-4 rounded-2xl bg-beige/70 p-5 text-lg font-medium leading-relaxed">
           {data.summary}
         </blockquote>
@@ -108,105 +98,33 @@ export default function ResultView({
         </p>
       </section>
 
-      {/* 행동 도감 */}
-      <section className={CARD}>
-        <h2 className="text-lg font-bold">📖 행동 도감</h2>
-        <p className="mt-1 mb-5 text-sm text-muted">
-          {data.isDemo
-            ? "행동별 시간과 비율이에요."
-            : `이 영상에서 확실하게 구분된 ${formatDuration(highlights.observedSec)} 중 비율이에요. 못 본 행동은 영상에 담기지 않았다는 뜻이에요.`}
-        </p>
-        <BehaviorDex stats={stats} />
-        {/* 행동 비율 막대 */}
-        <div
-          className="mt-6 flex h-4 overflow-hidden rounded-full bg-beige"
-          role="img"
-          aria-label="행동별 비율 막대"
-        >
-          {stats
-            .filter((s) => s.percent > 0)
-            .map((s) => (
-              <div key={s.key} style={{ width: `${s.percent}%`, backgroundColor: s.color }} />
-            ))}
-        </div>
-      </section>
+      {hasTimes ? (
+        <>
+          {/* 행동 타임라인: 시간 순서의 원본 구간 */}
+          <section className={CARD}>
+            <h2 className="text-lg font-bold">🕒 행동 타임라인</h2>
+            <p className="mt-1 mb-5 text-sm text-muted">
+              시간 순서대로 관찰된 구간이에요. 구간을 눌러 그 시간에 관찰된 내용을 확인해 보세요.
+            </p>
+            <BehaviorTimeline items={timelineItems} observedSec={highlights.observedSec} />
+          </section>
 
-      {/* 행동 타임라인 */}
-      {hasTimes && (
+          {/* 행동 기록: 같은 행동을 모아서 보여주는 요약 */}
+          <section className={CARD}>
+            <h2 className="text-lg font-bold">📝 행동 기록</h2>
+            <p className="mt-1 mb-5 text-sm text-muted">
+              영상에서 확인된 행동을 종류별로 모았어요. {formatDuration(highlights.observedSec)} 중 비율이고,
+              시간 순서는 위의 타임라인에서 볼 수 있어요.
+            </p>
+            <BehaviorSummary summary={summary} />
+          </section>
+        </>
+      ) : (
         <section className={CARD}>
           <h2 className="text-lg font-bold">🕒 행동 타임라인</h2>
-          <p className="mt-1 mb-5 text-sm text-muted">
-            구간을 눌러 그 시간에 관찰된 내용을 확인해 보세요. 빗금 구간은 판단이 어려웠던 부분이에요.
-          </p>
-          <BehaviorTimeline items={timelineItems} observedSec={highlights.observedSec} />
+          <p className="mt-3 text-sm text-muted">표시할 행동 구간이 없어요. 시간은 임의로 만들어 보여주지 않아요.</p>
         </section>
       )}
-
-      {/* 행동 기록 */}
-      <section className={CARD}>
-        <h2 className="text-lg font-bold">📝 행동 기록</h2>
-        {hasTimes ? (
-          <ol className="mt-5 space-y-3">
-            {timelineItems.map((t) => {
-              const dur = t.endSec - t.startSec;
-              const pct =
-                t.confident && highlights.observedSec > 0
-                  ? Math.round((dur / highlights.observedSec) * 100)
-                  : null;
-              return (
-                <li
-                  key={`${t.startSec}-${t.endSec}-${t.behavior}`}
-                  className="rounded-2xl border border-line bg-background p-4"
-                >
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span aria-hidden className="text-xl">
-                      {BEHAVIOR_ICONS[t.behavior]}
-                    </span>
-                    <span className="font-bold">{BEHAVIOR_LABELS[t.behavior]}</span>
-                    {!t.confident && (
-                      <span className="rounded-full bg-pink-soft px-2 py-0.5 text-xs text-foreground/70">
-                        불확실
-                      </span>
-                    )}
-                    <span className="text-xs text-muted">
-                      {formatClock(t.startSec)}~{formatClock(t.endSec)} · {formatDuration(dur)}
-                      {pct !== null && ` · ${pct}%`}
-                    </span>
-                  </div>
-                  {pct !== null && (
-                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-beige">
-                      <div
-                        className="animate-grow h-full rounded-full"
-                        style={{ width: `${pct}%`, backgroundColor: BEHAVIOR_COLORS[t.behavior] }}
-                      />
-                    </div>
-                  )}
-                  <p className="mt-2 text-sm leading-relaxed text-foreground/90">{t.note}</p>
-                </li>
-              );
-            })}
-          </ol>
-        ) : (
-          <ol className="mt-5 space-y-3">
-            {data.timeline.map((t) => (
-              <li
-                key={t.label + t.note}
-                className="flex items-start gap-3 rounded-2xl border border-line bg-background p-4"
-              >
-                <span aria-hidden className="text-xl">
-                  {BEHAVIOR_ICONS[t.behavior]}
-                </span>
-                <div>
-                  <p className="text-xs text-muted">
-                    {t.label} · {BEHAVIOR_LABELS[t.behavior]}
-                  </p>
-                  <p className="text-sm">{t.note}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
 
       {hasBaseline ? (
         /* 평소와 다른 점: 실제 과거 기록이 충분해서 baseline이 있을 때만 */
@@ -296,16 +214,26 @@ export default function ResultView({
         </section>
       )}
 
+      {/* 이번 영상으로 얻은 기록: AI 분석을 다 본 뒤에 도감/레벨/아이템 보상을 보여줘요 (실제 분석 결과일 때만) */}
+      {analysisId && (
+        <RecordReward
+          analysisId={analysisId}
+          seconds={seconds}
+          observedSec={highlights.observedSec}
+          segments={timelineItems}
+        />
+      )}
+
       <div className="flex flex-col gap-3 pt-2 sm:flex-row">
         <Link
           href="/upload"
-          className="rounded-full bg-brand px-8 py-4 text-center font-medium text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-dark"
+          className="btn-primary !py-4 text-base"
         >
           🎥 다른 영상 분석하기
         </Link>
         <Link
           href="/"
-          className="rounded-full border border-line bg-surface px-8 py-4 text-center font-medium transition hover:-translate-y-0.5 hover:border-brand"
+          className="btn-secondary !py-4 text-base"
         >
           처음으로
         </Link>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { BEHAVIOR_LABELS, formatClock, formatDuration } from "@/lib/behaviors";
+import { BEHAVIOR_COLORS, BEHAVIOR_LABELS, formatDuration, formatRange } from "@/lib/behaviors";
 import { BEHAVIOR_ICONS } from "@/lib/behavior-ui";
 import { useMyDog } from "@/lib/my-dog";
 import BehaviorTimeline from "./BehaviorTimeline";
@@ -24,8 +24,8 @@ export default function HomeTimeline() {
   const current = withTimeline.find((r) => r.id === pickedId) ?? withTimeline[0];
 
   return (
-    <section className="mx-auto max-w-5xl px-5 pb-10">
-      <div className="rounded-[2rem] border border-line bg-surface p-5 shadow-soft sm:p-6">
+    <section className="mx-auto max-w-5xl px-4 pb-8 sm:px-5 sm:pb-10">
+      <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold">🕒 영상 속 멍로그 · 행동 타임라인</h2>
           {current && (
@@ -39,7 +39,7 @@ export default function HomeTimeline() {
         </div>
 
         {!current ? (
-          <div className="mt-5 flex flex-col items-center rounded-3xl bg-background px-5 py-10 text-center">
+          <div className="mt-5 flex flex-col items-center rounded-2xl bg-background px-5 py-10 text-center">
             <span aria-hidden className="flex h-14 w-14 items-center justify-center rounded-2xl bg-beige text-3xl">
               🕒
             </span>
@@ -51,7 +51,7 @@ export default function HomeTimeline() {
             </p>
             <Link
               href="/upload"
-              className="mt-5 rounded-full bg-brand px-6 py-3 text-sm font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-dark"
+              className="btn-primary mt-5"
             >
               🎥 영상 업로드하기
             </Link>
@@ -66,7 +66,7 @@ export default function HomeTimeline() {
                     type="button"
                     onClick={() => setPickedId(r.id)}
                     aria-pressed={r.id === current.id}
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
+                    className={`min-h-9 rounded-full px-3.5 text-xs font-medium transition active:scale-95 ${
                       r.id === current.id
                         ? "bg-brand text-white"
                         : "bg-beige text-foreground/80 hover:bg-beige/70"
@@ -88,11 +88,13 @@ export default function HomeTimeline() {
               observedSec={current.observedSec}
             />
 
-            <ol className="mt-5 space-y-2">
+            <h3 className="mt-6 text-sm font-bold text-foreground/80">시간 순서 기록</h3>
+            <ol className="mt-2 space-y-2">
               {current.segments!.map((s) => (
                 <li
                   key={`${s.startSec}-${s.endSec}-${s.behavior}`}
-                  className="flex items-start gap-3 rounded-2xl bg-background p-3.5"
+                  className="flex items-start gap-3 rounded-2xl border-l-4 bg-background p-3.5"
+                  style={{ borderLeftColor: BEHAVIOR_COLORS[s.behavior] }}
                 >
                   <span aria-hidden className="mt-0.5 text-xl">
                     {BEHAVIOR_ICONS[s.behavior]}
@@ -100,7 +102,7 @@ export default function HomeTimeline() {
                   <div className="min-w-0 text-sm">
                     <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="font-mono text-xs text-muted">
-                        {formatClock(s.startSec)}~{formatClock(s.endSec)}
+                        {formatRange(s.startSec, s.endSec)}
                       </span>
                       <span className="font-bold">{BEHAVIOR_LABELS[s.behavior]}</span>
                       <span className="text-xs text-muted">{formatDuration(s.endSec - s.startSec)}</span>

@@ -101,7 +101,7 @@ export default function AnalysisProgress({ id }: { id: string }) {
         <p role="alert" className="mt-3 text-muted">{errorMsg}</p>
         <Link
           href="/upload"
-          className="mt-8 inline-block rounded-full bg-brand px-8 py-4 font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-dark"
+          className="btn-primary mt-8 !py-4 text-base"
         >
           다시 시도하기
         </Link>
@@ -112,7 +112,7 @@ export default function AnalysisProgress({ id }: { id: string }) {
   const shown = done ? 100 : progress;
 
   return (
-    <div className="mx-auto max-w-xl px-5 py-12 text-center">
+    <div className="mx-auto max-w-xl px-4 py-10 text-center sm:px-5 sm:py-12">
       <MyDogCharacter
         mood={done ? "done" : "thinking"}
         className="animate-float mx-auto h-40 w-40"
@@ -148,12 +148,12 @@ export default function AnalysisProgress({ id }: { id: string }) {
           return (
             <li
               key={st.label}
-              className={`flex items-center gap-3 rounded-2xl border px-4 py-3.5 text-sm transition ${
+              className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm transition ${
                 state === "active"
-                  ? "border-brand bg-brand-soft font-bold shadow-soft"
+                  ? "bg-brand-soft font-bold shadow-soft ring-2 ring-brand"
                   : state === "done"
-                    ? "border-line bg-surface"
-                    : "border-line bg-surface/60 text-muted"
+                    ? "bg-surface shadow-soft"
+                    : "bg-surface/60 text-muted"
               }`}
             >
               <span

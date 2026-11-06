@@ -4,7 +4,21 @@ import { useState, type ReactNode } from "react";
 import { BEHAVIOR_LABELS, formatDuration, type BehaviorKey } from "@/lib/behaviors";
 import { BEHAVIOR_ICONS } from "@/lib/behavior-ui";
 import { useMyDog, type Collection } from "@/lib/my-dog";
+import { useStyle } from "@/lib/my-style";
 import { DogArt } from "./DogCharacter";
+import {
+  BedArt,
+  EatBowl,
+  FloorArt,
+  PlantArt,
+  RugArt,
+  ShelfArt,
+  ToyArt,
+  WallArt,
+  Wallpaper,
+  WaterBowl,
+  WindowDeco,
+} from "./RoomArt";
 
 // 방 안의 물건과 행동 도감을 연결해요. 해당 행동이 영상에서 실제로 관찰되어 도감에 담기면 물건에 ✓가 켜져요.
 const ITEMS: { key: BehaviorKey; name: string }[] = [
@@ -63,9 +77,20 @@ function Hotspot({
   );
 }
 
-export default function MyRoom({ collection }: { collection: Collection }) {
+export default function MyRoom({
+  collection,
+  children,
+  pinned = false,
+}: {
+  collection: Collection;
+  pinned?: boolean; // 꾸미기 패널이 열려 있을 때 모바일에서 방을 화면 위에 고정해서, 바뀌는 모습을 바로 볼 수 있게 해요
+  children?: ReactNode; // 방 아래에 붙는 영역 (옷장/방 꾸미기 버튼과 패널)
+}) {
   const [selected, setSelected] = useState<BehaviorKey | null>(null);
   const { profile } = useMyDog();
+  const {
+    style: { room, outfit },
+  } = useStyle();
   const found = (k: BehaviorKey) => collection[k].count > 0;
   const sel = selected ? ITEMS.find((i) => i.key === selected) : null;
   const props = (k: BehaviorKey, bx: number, by: number) => ({
@@ -80,57 +105,26 @@ export default function MyRoom({ collection }: { collection: Collection }) {
 
   return (
     <div>
+      <div
+        className={
+          pinned
+            ? "sticky top-[7.25rem] z-10 -mx-1 bg-background px-1 pb-2 pt-1 lg:static lg:mx-0 lg:bg-transparent lg:p-0"
+            : ""
+        }
+      >
       <svg
         viewBox="0 0 640 420"
         role="group"
         aria-label="내 강아지의 방. 물건을 누르면 행동 도감 정보를 볼 수 있어요"
-        className="h-auto w-full rounded-[2rem] shadow-soft"
+        className="h-auto w-full rounded-[1.75rem] shadow-soft"
       >
-        {/* 벽 */}
-        <rect width="640" height="420" fill="#eaf2e7" />
-        <rect y="236" width="640" height="60" fill="#dbe8d7" />
-        <path d="M0 236 H640" stroke="#cfe0cb" strokeWidth="4" />
-        {/* 바닥 */}
-        <rect y="296" width="640" height="124" fill="#f3e3c7" />
-        <path d="M0 296 H640 M0 336 H640 M0 380 H640" stroke="#e8d3ae" strokeWidth="3" />
-
-        {/* 액자 · 선반 · 화분 (꾸미기 요소) */}
-        <rect x="246" y="52" width="96" height="76" rx="14" fill="#fffdf8" />
-        <rect x="256" y="62" width="76" height="56" rx="9" fill="#fbe6e1" />
-        {profile.photo ? (
-          <>
-            <clipPath id="room-frame-clip">
-              <rect x="256" y="62" width="76" height="56" rx="9" />
-            </clipPath>
-            <image
-              href={profile.photo}
-              x="244"
-              y="62"
-              width="100"
-              height="100"
-              preserveAspectRatio="xMidYMin slice"
-              clipPath="url(#room-frame-clip)"
-            />
-          </>
-        ) : (
-          <text x="294" y="100" textAnchor="middle" fontSize="28">🐾</text>
-        )}
-        <rect x="236" y="170" width="170" height="11" rx="5.5" fill="#d9c3a0" />
-        <path d="M356 170 h38 l-5 -26 h-28z" fill="#c98f6b" />
-        <ellipse cx="375" cy="138" rx="9" ry="22" fill="#6f9a78" transform="rotate(-18 375 138)" />
-        <ellipse cx="383" cy="134" rx="9" ry="24" fill="#58855f" transform="rotate(14 383 134)" />
-        <ellipse cx="367" cy="140" rx="8" ry="18" fill="#7fae86" transform="rotate(-42 367 140)" />
-        <rect x="262" y="146" width="22" height="24" rx="4" fill="#e9b949" />
-        <rect x="288" y="154" width="18" height="16" rx="4" fill="#f2c9c2" />
-        {/* 큰 화분 */}
-        <path d="M596 296 h-38 l5 -44 h28z" fill="#c98f6b" />
-        <ellipse cx="577" cy="226" rx="12" ry="36" fill="#58855f" transform="rotate(-16 577 226)" />
-        <ellipse cx="590" cy="222" rx="11" ry="38" fill="#6f9a78" transform="rotate(14 590 222)" />
-        <ellipse cx="568" cy="232" rx="10" ry="28" fill="#7fae86" transform="rotate(-42 568 232)" />
-
-        {/* 러그 */}
-        <ellipse cx="322" cy="362" rx="168" ry="34" fill="#fbe6e1" />
-        <ellipse cx="322" cy="362" rx="124" ry="23" fill="#f6d4cd" />
+        {/* 벽 · 바닥 · 장식은 방 꾸미기에서 고른 모습이에요 (기본값은 꾸미기 전과 같아요) */}
+        <Wallpaper id={room.wall} />
+        <FloorArt id={room.floor} />
+        <WallArt id={room.wallArt} photo={profile.photo} />
+        <ShelfArt id={room.shelf} />
+        <PlantArt id={room.plant} />
+        <RugArt id={room.rug} />
 
         {/* 창문 → 주변 관찰 */}
         <Hotspot {...props("watch", 190, 46)}>
@@ -141,6 +135,7 @@ export default function MyRoom({ collection }: { collection: Collection }) {
           <path d="M126 134 q10 -15 25 -4 q15 -8 19 4z" fill="#fff" opacity="0.9" />
           <rect x="28" y="162" width="164" height="12" rx="6" fill="#e3d2b6" />
         </Hotspot>
+        <WindowDeco id={room.windowDeco} />
 
         {/* 산책 목줄 → 걷기/이동 */}
         <Hotspot {...props("move", 484, 64)}>
@@ -158,50 +153,37 @@ export default function MyRoom({ collection }: { collection: Collection }) {
 
         {/* 침대 → 휴식 */}
         <Hotspot {...props("rest", 190, 304)}>
-          <ellipse cx="108" cy="378" rx="82" ry="24" fill="#cdb592" />
-          <path d="M34 362 q-8 -46 30 -50 h88 q38 4 30 50z" fill="#d9c3a0" />
-          <ellipse cx="108" cy="362" rx="66" ry="17" fill="#fff6e6" />
-          <path d="M70 360 q38 -16 76 0" stroke="#f2c9c2" strokeWidth="9" fill="none" strokeLinecap="round" />
-          <text x="156" y="330" fontSize="20" fill="#8aa6b8" fontWeight="700">z</text>
+          <BedArt id={room.bed} />
         </Hotspot>
 
-        {/* 공 → 놀이 */}
+        {/* 장난감 → 놀이 */}
         <Hotspot {...props("play", 440, 330)}>
-          <circle cx="414" cy="372" r="19" fill="#e9b949" />
-          <path d="M396 366 q18 11 36 0" stroke="#fffdf8" strokeWidth="3" fill="none" />
-          <rect x="380" y="384" width="26" height="9" rx="4.5" fill="#fffdf8" transform="rotate(-18 393 388)" />
+          <ToyArt id={room.toy} />
         </Hotspot>
 
         {/* 밥그릇 → 식사 */}
         <Hotspot {...props("eat", 520, 336)}>
-          <ellipse cx="494" cy="388" rx="32" ry="9" fill="#cfa88f" />
-          <path d="M466 372 h56 q-2 18 -28 18 t-28 -18z" fill="#c9594d" />
-          <ellipse cx="494" cy="372" rx="28" ry="7" fill="#7a3f33" />
-          <circle cx="484" cy="369" r="4" fill="#c98f6b" />
-          <circle cx="496" cy="367" r="4" fill="#d9a37f" />
-          <circle cx="505" cy="371" r="4" fill="#c98f6b" />
+          <EatBowl id={room.bowls} />
         </Hotspot>
 
         {/* 물그릇 → 물 마시기 */}
         <Hotspot {...props("drink", 604, 336)}>
-          <ellipse cx="572" cy="388" rx="32" ry="9" fill="#a9c3d0" />
-          <path d="M544 372 h56 q-2 18 -28 18 t-28 -18z" fill="#6c9bb5" />
-          <ellipse cx="572" cy="372" rx="28" ry="7" fill="#bfe0ee" />
-          <path d="M560 371 q6 -4 12 0 t12 0" stroke="#fff" strokeWidth="2" fill="none" />
+          <WaterBowl id={room.bowls} />
         </Hotspot>
 
         {/* 강아지 캐릭터 */}
         <g transform="translate(222 148) scale(0.98)">
           <g className="animate-float">
-            <DogArt mood="idle" look={{ breed: profile.breed, coat: profile.coat }} />
+            <DogArt mood="idle" look={{ breed: profile.breed, coat: profile.coat }} outfit={outfit} />
           </g>
         </g>
       </svg>
+      </div>
 
       {/* 선택한 물건 정보 */}
       <div
         aria-live="polite"
-        className="mt-4 rounded-3xl border border-line bg-surface p-4 text-sm shadow-soft sm:p-5"
+        className="card mt-4 !p-4 text-sm sm:!p-5"
       >
         {sel ? (
           <div className="flex items-start gap-4">
@@ -235,6 +217,7 @@ export default function MyRoom({ collection }: { collection: Collection }) {
           </p>
         )}
       </div>
+      {children}
     </div>
   );
 }

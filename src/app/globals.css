@@ -24,7 +24,48 @@
   --shadow-soft: 0 8px 28px -12px rgb(92 74 52 / 0.22);
 }
 
+/* ───────── 공통 UI 조각 (카드/버튼/칩을 한 규칙으로 통일) ───────── */
+@utility card {
+  border-radius: 1.75rem;
+  background-color: var(--color-surface);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-soft), 0 0 0 1px rgb(92 74 52 / 0.05);
+  @media (min-width: 40rem) { padding: 1.5rem; }
+}
+@utility tile {
+  border-radius: 1rem;
+  background-color: var(--color-background);
+  padding: 1rem;
+}
+@utility btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  min-height: 2.75rem; border-radius: 9999px; padding: 0.75rem 1.5rem;
+  font-size: 0.875rem; font-weight: 700; color: #fff;
+  background-color: var(--color-brand); box-shadow: var(--shadow-soft);
+  transition: transform 0.15s, background-color 0.15s, box-shadow 0.15s;
+  &:hover { background-color: var(--color-brand-dark); transform: translateY(-2px); }
+  &:active { transform: scale(0.97); }
+}
+@utility btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  min-height: 2.75rem; border-radius: 9999px; padding: 0.75rem 1.5rem;
+  font-size: 0.875rem; font-weight: 700; color: var(--color-foreground);
+  background-color: var(--color-surface); box-shadow: 0 0 0 1px var(--color-line);
+  transition: transform 0.15s, box-shadow 0.15s;
+  &:hover { transform: translateY(-2px); box-shadow: 0 0 0 1.5px var(--color-brand); }
+  &:active { transform: scale(0.97); }
+}
+@utility chip {
+  display: inline-flex; align-items: center; gap: 0.375rem;
+  border-radius: 9999px; padding: 0.25rem 0.75rem;
+  font-size: 0.75rem; font-weight: 500;
+  background-color: var(--color-beige);
+}
+
+:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+
 body {
+  overflow-x: clip;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-noto-sans-kr), system-ui, sans-serif;

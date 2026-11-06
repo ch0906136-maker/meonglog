@@ -11,7 +11,7 @@ const NAV = [
 export default function SiteHeader() {
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-background/90 backdrop-blur">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-3">
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-2.5 sm:px-5 sm:py-3">
         <Link href="/" className="flex items-center gap-2 text-lg font-bold">
           <span
             aria-hidden
@@ -30,7 +30,7 @@ export default function SiteHeader() {
             <Link
               key={n.label}
               href={n.href}
-              className="rounded-full px-4 py-2 text-foreground/80 transition hover:bg-beige hover:text-foreground"
+              className="flex min-h-11 items-center rounded-full px-3.5 text-foreground/80 transition hover:bg-beige hover:text-foreground active:scale-95 sm:px-4"
             >
               {n.label}
             </Link>
@@ -39,7 +39,7 @@ export default function SiteHeader() {
 
         <Link
           href="/upload"
-          className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-dark"
+          className="btn-primary !px-5"
         >
           🎥 영상 올리기
         </Link>

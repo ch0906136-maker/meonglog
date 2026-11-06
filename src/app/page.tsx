@@ -1,14 +1,10 @@
-import Link from "next/link";
 import MyRoomHome from "@/components/MyRoomHome";
-import { formatDuration, getStats } from "@/lib/behaviors";
-import { BEHAVIOR_ICONS } from "@/lib/behavior-ui";
-import { DEMO_RESULT } from "@/lib/demo-data";
 
 const STEPS = [
   {
     icon: "🎥",
     title: "영상 올리기",
-    desc: "홈캠이나 휴대폰으로 찍은 강아지 영상을 올려 주세요.",
+    desc: "휴대폰이나 홈캠으로 찍은 1~3분 정도의 강아지 영상을 올려 주세요.",
   },
   {
     icon: "🔍",
@@ -23,65 +19,10 @@ const STEPS = [
 ];
 
 export default function Home() {
-  // 예시 영역은 기존 데모 데이터(실제 분석 결과가 아님)를 그대로 보여줘요.
-  const stats = getStats(DEMO_RESULT.seconds, null)
-    .filter((s) => s.seconds > 0)
-    .sort((a, b) => b.seconds - a.seconds);
-  const top = stats.slice(0, 3);
-
   return (
     <div>
       {/* 내 강아지 · 마이룸 · 도감 (기기에 저장된 기록 기반) */}
       <MyRoomHome />
-
-      {/* 예시 멍로그 */}
-      <section className="mx-auto max-w-5xl px-5 pb-14">
-        <div className="rounded-[2rem] border border-line bg-surface p-6 shadow-soft sm:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xl font-bold">🐶 영상 속 멍로그는 이렇게 보여요</h2>
-            <span className="rounded-full bg-pink-soft px-3 py-1 text-xs font-bold text-foreground/70">
-              예시 화면
-            </span>
-          </div>
-          <p className="mt-2 text-sm text-muted">
-            분석이 끝나면 영상 속 행동의 시간과 비율을 이렇게 정리해 드려요.
-          </p>
-          <ul className="mt-6 grid gap-3 sm:grid-cols-3">
-            {top.map((s) => (
-              <li key={s.key} className="rounded-3xl bg-background p-5">
-                <div className="flex items-center gap-3">
-                  <span
-                    aria-hidden
-                    className="flex h-12 w-12 items-center justify-center rounded-2xl bg-beige text-2xl"
-                  >
-                    {BEHAVIOR_ICONS[s.key]}
-                  </span>
-                  <div>
-                    <p className="font-bold">{s.label}</p>
-                    <p className="text-xs text-muted">
-                      {formatDuration(s.seconds)} · {s.percent}%
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-beige">
-                  <div
-                    className="animate-grow h-full rounded-full"
-                    style={{ width: `${s.percent}%`, backgroundColor: s.color }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-5">
-            <Link
-              href="/result/demo"
-              className="inline-block rounded-full border border-line bg-surface px-6 py-3 text-sm font-medium transition hover:-translate-y-0.5 hover:border-brand"
-            >
-              예시 멍로그 전체 보기
-            </Link>
-          </div>
-        </div>
-      </section>
 
       {/* 이렇게 작동해요 */}
       <section className="border-y border-line bg-beige/50">
@@ -91,7 +32,7 @@ export default function Home() {
             {STEPS.map((s, i) => (
               <li
                 key={s.title}
-                className="rounded-3xl border border-line bg-surface p-6 shadow-soft"
+                className="card !rounded-3xl"
               >
                 <span
                   aria-hidden
@@ -111,7 +52,7 @@ export default function Home() {
       </section>
 
       <section className="mx-auto max-w-5xl px-5 py-14">
-        <div className="rounded-[2rem] bg-sage-soft p-6 sm:p-8">
+        <div className="rounded-[1.75rem] bg-sage-soft p-5 sm:p-8">
           <h2 className="text-lg font-bold">멍로그가 하지 않는 것</h2>
           <p className="mt-2 text-sm leading-relaxed text-foreground/80">
             멍로그는 질병을 진단하거나 판단하지 않아요. 영상에서 실제로 확인된 행동만 기록하고,
